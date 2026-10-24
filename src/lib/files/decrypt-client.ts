@@ -4,14 +4,16 @@ import { clearVaultKeyMaterial } from "@/lib/crypto/key-memory";
 const BLOB_FALLBACK_MAX_BYTES = 32_000_000;
 const TEXT_PREVIEW_MAX_BYTES = 2_000_000;
 const PREVIEW_MAX_BYTES = 20_000_000;
+export const VIDEO_BLOB_PREVIEW_MAX_BYTES = 10_000_000;
 
-export type PreviewKind = "image" | "audio" | "pdf" | "text" | "none";
+export type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "none";
 export type DecryptedFile = { blob: Blob; metadata: { storedName: string; extension: string; mimeType: string } };
 
 export function previewKind(mimeType: string, extension: string): PreviewKind {
   const mime = mimeType.toLowerCase();
   const ext = extension.toLowerCase();
   if (["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime) && ["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "image";
+  if (mime === "video/mp4" && ext === "mp4") return "video";
   if (["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg"].includes(mime) && ["mp3", "m4a", "wav", "ogg"].includes(ext)) return "audio";
   if (mime === "application/pdf" && ext === "pdf") return "pdf";
   if (mime === "text/plain" && ["txt", "log", "csv", "json"].includes(ext)) return "text";
@@ -72,8 +74,10 @@ export async function decryptToBlob(fileId: string, storedSizeBytes: number, man
 
 export async function decryptPreview(fileId: string, storedSizeBytes: number, manifest: FileManifest,
   expected: { extension: string; mimeType: string }, kind: PreviewKind, signal?: AbortSignal): Promise<DecryptedFile> {
-  const limit = kind === "text" ? TEXT_PREVIEW_MAX_BYTES : PREVIEW_MAX_BYTES;
-  if (kind === "none" || storedSizeBytes > limit + 65_536) throw new Error("This file type or size is download-only");
+  const limit = kind === "text" ? TEXT_PREVIEW_MAX_BYTES : kind === "video" ? VIDEO_BLOB_PREVIEW_MAX_BYTES : PREVIEW_MAX_BYTES;
+  if (kind === "none" || (kind === "video" ? storedSizeBytes >= limit : storedSizeBytes > limit + 65_536)) {
+    throw new Error("This file type or size is download-only");
+  }
   return decryptToBlob(fileId, storedSizeBytes, manifest, expected, signal);
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
-import { authenticatedCiphertextSource, decryptToBlob, downloadName, previewKind } from "../src/lib/files/decrypt-client";
+import { VIDEO_BLOB_PREVIEW_MAX_BYTES, authenticatedCiphertextSource, decryptPreview, decryptToBlob, downloadName, previewKind } from "../src/lib/files/decrypt-client";
 import { prepareEncryptedFile, type MetadataInput } from "../src/lib/crypto/file-container";
 import { clearVaultKeyMaterial, installVaultRootKey } from "../src/lib/crypto/key-memory";
 
@@ -19,6 +19,8 @@ async function fixture() {
 
 test("only allowlisted stored MIME and extension pairs are inline previewable", () => {
   assert.equal(previewKind("image/webp", "webp"), "image");
+  assert.equal(previewKind("video/mp4", "mp4"), "video");
+  assert.equal(previewKind("video/mp4", "mov"), "none");
   assert.equal(previewKind("audio/mpeg", "mp3"), "audio");
   assert.equal(previewKind("application/pdf", "pdf"), "pdf");
   assert.equal(previewKind("text/plain", "txt"), "text");
@@ -26,6 +28,38 @@ test("only allowlisted stored MIME and extension pairs are inline previewable", 
   assert.equal(previewKind("text/html", "html"), "none");
   assert.equal(previewKind("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"), "none");
   assert.equal(downloadName("../private/Report.old", "webp"), "..privateReport.webp");
+});
+
+test("small MP4 preview decrypts only authenticated bytes and rejects the size boundary", async () => {
+  installVaultRootKey(root, vaultId);
+  const mp4 = Uint8Array.from([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 0, 0, 0, 0]);
+  const prepared = await prepareEncryptedFile(new Blob([mp4]),
+    { storedName: "stored-video.mp4", extension: "mp4", mimeType: "video/mp4" }, "video");
+  const parts: Uint8Array[] = [];
+  for await (const chunk of prepared.chunks()) parts.push(chunk);
+  const bytes = new Uint8Array(await new Blob(parts.map((part) => part.slice().buffer)).arrayBuffer());
+  const originalFetch = globalThis.fetch;
+  let reads = 0;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const range = /^bytes=(\d+)-(\d+)$/.exec(new Headers(init?.headers).get("range") ?? "")!;
+    const start = Number(range[1]), end = Number(range[2]); reads++;
+    const part = bytes.slice(start, end + 1);
+    return new Response(part, { status: 206, headers: {
+      "content-range": `bytes ${start}-${end}/${bytes.length}`, "content-length": String(part.length),
+    } });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(decryptPreview("0123456789abcdef01234567", VIDEO_BLOB_PREVIEW_MAX_BYTES,
+      prepared.manifest, { extension: "mp4", mimeType: "video/mp4" }, "video"));
+    assert.equal(reads, 0);
+    const result = await decryptPreview("0123456789abcdef01234567", bytes.length,
+      prepared.manifest, { extension: "mp4", mimeType: "video/mp4" }, "video");
+    assert.equal(result.blob.type, "video/mp4");
+    assert.deepEqual(new Uint8Array(await result.blob.arrayBuffer()), mp4);
+    bytes[bytes.length - 1] ^= 1;
+    await assert.rejects(decryptPreview("0123456789abcdef01234567", bytes.length,
+      prepared.manifest, { extension: "mp4", mimeType: "video/mp4" }, "video"));
+  } finally { globalThis.fetch = originalFetch; clearVaultKeyMaterial(); bytes.fill(0); }
 });
 
 test("range client decrypts exact authenticated chunks and rejects invalid provider ranges", async () => {

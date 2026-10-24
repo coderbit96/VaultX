@@ -11,7 +11,7 @@ import { UploadManager } from "@/components/vault/upload-manager";
 import { VaultKeySettings } from "@/components/vault/vault-key-settings";
 import { decryptFileName } from "@/lib/crypto/file-names";
 import { clearVaultKeyMaterial, hasVaultRootKey } from "@/lib/crypto/key-memory";
-import { chooseDownloadDestination, decryptPreview, decryptThumbnail, downloadDecryptedFile, downloadName } from "@/lib/files/decrypt-client";
+import { VIDEO_BLOB_PREVIEW_MAX_BYTES, chooseDownloadDestination, decryptPreview, decryptThumbnail, downloadDecryptedFile, downloadName, previewKind } from "@/lib/files/decrypt-client";
 import { announceFileDeleting, onFileDeleting } from "@/lib/files/deletion-events";
 import { onFileReady } from "@/lib/files/ready-events";
 import { useVaultKeyStatus } from "@/hooks/use-vault-key-status";
@@ -87,23 +87,23 @@ export function SimpleGallery() {
   const unlocked = useVaultKeyStatus();
   const [state, setState] = useState<State>({ status: "loading", files: [], next: null });
   const [selected, setSelected] = useState<Media | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Media | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const loadController = useRef<AbortController | null>(null);
   const viewController = useRef<AbortController | null>(null);
   const actionController = useRef<AbortController | null>(null);
-  const photoUrlRef = useRef<string | null>(null);
+  const mediaUrlRef = useRef<string | null>(null);
   const generation = useRef(0);
 
   const closeViewer = useCallback(() => {
     viewController.current?.abort(); viewController.current = null;
     actionController.current?.abort(); actionController.current = null;
-    setSelected(null); setPhotoError(false);
-    if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
-    photoUrlRef.current = null; setPhotoUrl(null);
+    setSelected(null); setMediaError(false);
+    if (mediaUrlRef.current) URL.revokeObjectURL(mediaUrlRef.current);
+    mediaUrlRef.current = null; setMediaUrl(null);
   }, []);
 
   const load = useCallback(async (after?: string) => {
@@ -140,23 +140,25 @@ export function SimpleGallery() {
     const stopDeleting = onFileDeleting(refresh);
     if (hasVaultRootKey()) queueMicrotask(refresh);
     return () => { sequenceRef.current++; loadController.current?.abort(); viewController.current?.abort();
-      if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+      if (mediaUrlRef.current) URL.revokeObjectURL(mediaUrlRef.current);
       actionController.current?.abort(); stopReady(); stopDeleting(); window.removeEventListener("vaultx:key-clear", clear);
       window.removeEventListener("vaultx:key-ready", refresh); };
   }, [closeViewer, load]);
 
   async function open(file: Media) {
     closeViewer(); setSelected(file);
-    if (file.category !== "image") return;
+    const kind = previewKind(file.mimeType, file.extension);
+    if (kind !== "image" && kind !== "video") { setMediaError(true); return; }
+    if (kind === "video" && file.storedSizeBytes >= VIDEO_BLOB_PREVIEW_MAX_BYTES) { setMediaError(true); return; }
     const controller = new AbortController(); viewController.current = controller;
     try {
       const metadata = await accessFor(file, controller.signal);
-      if (metadata.storedSizeBytes >= 1_000_000) throw new Error("invalid_photo");
+      if (kind === "image" && metadata.storedSizeBytes >= 1_000_000) throw new Error("invalid_photo");
       const result = await decryptPreview(file.id, metadata.storedSizeBytes, metadata.encryptionManifest,
-        { extension: file.extension, mimeType: file.mimeType }, "image", controller.signal);
+        { extension: file.extension, mimeType: file.mimeType }, kind, controller.signal);
       if (controller.signal.aborted || !hasVaultRootKey()) return;
-      photoUrlRef.current = URL.createObjectURL(result.blob); setPhotoUrl(photoUrlRef.current);
-    } catch { if (!controller.signal.aborted && hasVaultRootKey()) setPhotoError(true); }
+      mediaUrlRef.current = URL.createObjectURL(result.blob); setMediaUrl(mediaUrlRef.current);
+    } catch { if (!controller.signal.aborted && hasVaultRootKey()) setMediaError(true); }
   }
 
   async function download(file: Media) {
@@ -219,12 +221,17 @@ export function SimpleGallery() {
 
     <Dialog open={selected !== null} onOpenChange={(open) => { if (!open) closeViewer(); }}>
       <DialogContent className="max-w-4xl"><DialogTitle>{selected?.name ?? "Media"}</DialogTitle>
-        <DialogDescription>{selected?.category === "video" ? "This encrypted video is download only." : "Private photo"}</DialogDescription>
+        <DialogDescription>{selected?.category === "video" ? "Private video. If this browser cannot play it, use Download." : "Private photo"}</DialogDescription>
         {/* Local decrypted object URL; never send it through an image optimizer. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {selected?.category === "image" && (photoUrl ? <img src={photoUrl} alt={selected.name} className="max-h-[65vh] w-full object-contain" />
-          : <p className="p-8 text-center text-sm text-muted">{photoError ? "Photo could not be opened." : "Decrypting photo…"}</p>)}
-        {selected?.category === "video" && <div className="flex min-h-40 items-center justify-center rounded-xl bg-raised"><Video size={38} aria-hidden="true" /></div>}
+        {selected?.category === "image" && (mediaUrl ? <img src={mediaUrl} alt={selected.name} className="max-h-[65vh] w-full object-contain" />
+          : <p className="p-8 text-center text-sm text-muted">{mediaError ? "Photo could not be opened." : "Decrypting photo…"}</p>)}
+        {selected?.category === "video" && (mediaUrl ? <video src={mediaUrl} controls playsInline preload="metadata"
+          aria-label={`Play ${selected.name}`} className="max-h-[65vh] w-full rounded-xl bg-black"
+          onError={() => setMediaError(true)} /> : <div className="flex min-h-40 items-center justify-center rounded-xl bg-raised">
+          {mediaError ? <p className="p-5 text-center text-sm text-muted">Video cannot play here. Use Download instead.</p>
+            : <p className="p-5 text-center text-sm text-muted">Decrypting video on this device…</p>}</div>)}
+        {selected?.category === "video" && mediaError && mediaUrl && <p className="text-sm text-muted">This browser cannot play the stored video. Use Download instead.</p>}
         {selected && <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={busy} onClick={() => void download(selected)}><Download size={16} />Download</Button>
           <Button variant="danger" onClick={() => { setDeleteTarget(selected); closeViewer(); }}><Trash2 size={16} />Delete</Button></div>}
       </DialogContent>

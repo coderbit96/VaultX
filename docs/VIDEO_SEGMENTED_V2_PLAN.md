@@ -1,6 +1,6 @@
 # New-video segmented encryption plan
 
-Owner decision on 2026-10-23: new videos may use multiple small encrypted objects in the **existing Cloudinary account**. Existing objects, credentials, records, and videos remain untouched. This document is an implementation contract, **not a working playback claim**. The current v1 video path remains download-only until a v2 path passes its tests.
+Owner decision on 2026-10-23: new videos may use multiple small encrypted objects in the **existing Cloudinary account**. Existing objects, credentials, records, and videos remain untouched. This document is an implementation contract, **not a working large-video playback claim**. The current v1 path can load a small authenticated MP4 into a temporary browser Blob; it does not meet the bounded streaming criterion. Larger or unsupported videos remain download-only until a v2 path passes its tests.
 
 ## Verified constraints
 
