@@ -1,13 +1,138 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
+@theme {
+  --color-canvas: #0b0d0e;
+  --color-surface: #121517;
+  --color-raised: #1a1e20;
+  --color-elevated: #252a2d;
+  --color-input: #101315;
+  --color-line: #30363a;
+  --color-line-strong: #465056;
+  --color-foreground: #f0f2ee;
+  --color-muted: #aab4b2;
+  --color-accent: #bedfa9;
+  --color-accent-hover: #d1edbe;
+  --color-accent-ink: #142016;
+  --color-danger: #ffa9a2;
+  --font-sans: "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
+:root { color-scheme: dark; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-canvas: #f5f7f3;
+    --color-surface: #ffffff;
+    --color-raised: #edf2ec;
+    --color-elevated: #e2eae0;
+    --color-input: #fafbf8;
+    --color-line: #d4ded4;
+    --color-line-strong: #a8b9aa;
+    --color-foreground: #17231a;
+    --color-muted: #53645a;
+    --color-accent: #3e6544;
+    --color-accent-hover: #315438;
+    --color-accent-ink: #ffffff;
+    --color-danger: #a43835;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #f5f7f3;
+  --color-surface: #ffffff;
+  --color-raised: #edf2ec;
+  --color-elevated: #e2eae0;
+  --color-input: #fafbf8;
+  --color-line: #d4ded4;
+  --color-line-strong: #a8b9aa;
+  --color-foreground: #17231a;
+  --color-muted: #53645a;
+  --color-accent: #3e6544;
+  --color-accent-hover: #315438;
+  --color-accent-ink: #ffffff;
+  --color-danger: #a43835;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
   margin: 0;
+  min-width: 320px;
   min-height: 100vh;
-  background: #020617;
-  color: #f8fafc;
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+html[data-vault-locked="true"] #vault-shell { visibility: hidden; }
+button, input { font: inherit; }
+::selection { background: var(--color-accent); color: var(--color-accent-ink); }
+
+.page-safe-area {
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+  padding-bottom: max(2.5rem, env(safe-area-inset-bottom));
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+}
+
+.page-inline-safe {
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+
+@media (min-width: 40rem) {
+  .page-inline-safe {
+    padding-left: max(2rem, env(safe-area-inset-left));
+    padding-right: max(2rem, env(safe-area-inset-right));
+  }
+}
+
+.mobile-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.vault-header { top: env(safe-area-inset-top); }
+
+.vault-fab {
+  bottom: calc(5.25rem + env(safe-area-inset-bottom));
+  right: max(1.25rem, env(safe-area-inset-right));
+}
+
+/* Each page is bounded to 36 cards; offscreen cards can skip paint work. */
+.gallery-media-card { content-visibility: auto; contain-intrinsic-size: auto 300px; }
+
+.pwa-status {
+  min-height: 3.5rem;
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+@media (min-width: 48rem) {
+  .vault-fab { bottom: 2rem; right: max(2rem, env(safe-area-inset-right)); }
+}
+
+.preview-glow {
+  background:
+    radial-gradient(circle at 75% 15%, rgba(190, 223, 169, 0.13), transparent 34%),
+    radial-gradient(circle at 4% 85%, rgba(117, 139, 135, 0.08), transparent 42%);
+}
+
+.vaultx-toaster [data-sonner-toast] {
+  --normal-bg: var(--color-raised);
+  --normal-border: var(--color-line-strong);
+  --normal-text: var(--color-foreground);
+  background: var(--normal-bg);
+  border-color: var(--normal-border);
+  color: var(--normal-text);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.vaultx-toaster [data-sonner-toast] [data-description] { color: var(--color-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

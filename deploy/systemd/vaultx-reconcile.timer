@@ -1,0 +1,11 @@
+[Unit]
+Description=Run one bounded VaultX reconciliation pass every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=30s
+Unit=vaultx-reconcile.service
+
+[Install]
+WantedBy=timers.target

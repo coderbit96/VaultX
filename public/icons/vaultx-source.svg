@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="VaultX">
+  <rect width="512" height="512" fill="#0b0d0e"/>
+  <rect x="54" y="54" width="404" height="404" rx="108" fill="#121517" stroke="#465056" stroke-width="8"/>
+  <circle cx="256" cy="256" r="142" fill="none" stroke="#252a2d" stroke-width="8"/>
+  <path d="M176 174 336 338M336 174 176 338" fill="none" stroke="#bedfa9" stroke-width="52" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="39" fill="#121517"/>
+  <circle cx="256" cy="256" r="12" fill="#bedfa9"/>
+</svg>

@@ -1,0 +1,26 @@
+# Recovery and reconciliation
+
+VaultX stores upload and deletion jobs in MongoDB before remote cleanup. `npm run recovery:run -- --run` processes **one bounded pass**: at most two expired uploads and two due deletion jobs. It only uses recorded opaque Cloudinary IDs. A second runner can overlap safely because each job needs a MongoDB compare-and-set lease. After a process crash, another pass may resume a job when its lease expires (two minutes for upload cleanup, ten minutes for an active upload transfer or deletion work). Remote deletion and absence checks are idempotent.
+
+## Run it yourself
+
+1. Use the trusted computer or server that holds VaultX's `.env.local`. In VS Code, open **Terminal → New Terminal** in `D:\VaultX`.
+2. Run `npm run recovery:run -- --run`. It prints counts only, without file names, public IDs or secrets. A nonzero exit code means some work was deferred or services were unavailable; the jobs remain saved.
+3. Open `http://localhost:3000/vault/deletions` while signed in. **Check recovery now** runs an owner-authorized small pass. **Retry now** can override the wait on a failed or retrying deletion job. The page refreshes while visible. This checkpoint also inspects expired upload jobs.
+
+For work while the page is closed, schedule the CLI on a **trusted machine with Node.js, the project files, `.env.local`, MongoDB access, and Cloudinary access**. On Windows, open **Task Scheduler → Create Task**. Choose your account, a schedule appropriate for your workload (for example every 15 minutes), and **Start a program**. Set **Program/script** to the installed `npm.cmd` path (often `C:\Program Files\nodejs\npm.cmd`), **Add arguments** to `run recovery:run -- --run`, and **Start in** to `D:\VaultX`. Select **Run whether user is logged on or not** only if your Windows account and secret storage are appropriate for that mode. Test once with **Run** and inspect Task Scheduler's **Last Run Result**. Keep `.env.local` readable only by the trusted account.
+
+For hosted deployment, run the same command in an external worker with server-only environment variables. This project does **not** expose an unauthenticated scheduler URL and does not depend on a Vercel cron tier. The owner checkpoint is a short web request, not a guarantee that long jobs finish before a host timeout. Schedule repeated passes at a rate supported by your actual host. If the host stops a pass, the lease eventually expires and the next pass resumes.
+
+## What each pass does
+
+- **Uploads:** after the upload intent expires, inspect unfinished jobs. If a file record already exists (including one being deleted), defer to that record's deletion job. Otherwise verify every recorded main and thumbnail asset identity, delete each found restricted raw object with CDN invalidation, confirm absence, then mark the upload cancelled. An unknown or mismatched object is never deleted. Manual cancellation of the job is needed after an identity mismatch. Eight transient failures end automatic retries and leave a failed job for manual investigation; the owner can retry cancellation from the Uploads page if that job is still in the tab's saved queue.
+- **Deletions:** process due pending, retrying, or expired leased file and folder jobs. The existing state machines confirm each remote object before removing database records. Folder jobs process remote objects in batches of eight. Backoff grows exponentially up to one hour; after eight failed attempts, the job stays **failed** until the owner presses **Retry now**. The page shows fixed error codes only, not provider messages.
+
+Both scanners cap each pass at four jobs of each kind. One upload and one deletion scan may run at the same time, and each scan processes jobs sequentially. This keeps concurrency bounded to two jobs. Repeated passes are needed for larger queues. Active uploads and active leases are left alone. Status is **completed** only after active Cloudinary objects and MongoDB file/folder records are confirmed removed. Cloudinary CDN invalidation is requested but may propagate later; provider backups and copies outside VaultX are outside this status.
+
+## Limits and manual investigation
+
+The worker can clean up only IDs durably recorded in MongoDB. It cannot safely discover or delete unknown Cloudinary assets, and it never sweeps a whole Cloudinary prefix. If an upload escaped before its job or object ID was recorded, inspect it manually in Cloudinary using a separate audited procedure. A deleted/incorrect MongoDB inventory, a provider identity mismatch, or unavailable credentials needs manual attention. No automatic retry is safe for an invalid inventory or identity mismatch.
+
+The worker does not guarantee exactly-once provider calls. A crash after a remote deletion but before MongoDB confirmation can repeat an absence lookup; it cannot mark completion until absence is verified. Large folder jobs need multiple passes. Keep your host's task timeout above the expected Cloudinary call time, or run this CLI in a dedicated external worker with a suitable timeout. Leases are fixed-duration and are not renewed mid-operation; do not configure multiple aggressive runners for very large jobs until a lease-renewal design is added.

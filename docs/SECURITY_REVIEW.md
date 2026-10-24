@@ -1,0 +1,43 @@
+# Prompt 36 security review — 2026-10-16
+
+For the current requirement-by-requirement status, see the [2026-10-22 PRD audit](PRD_AUDIT.md). The historical `folders:ui-check` failure recorded at the end of this review was repaired and the check passed in the later acceptance run; the audit preserves the newer result and its limits.
+
+## Scope and corrected findings
+
+This is a code and synthetic-service review, not a claim that VaultX is ready for sensitive personal data or production release. The review covered the PRD, route inventory, session and mutation checks, browser crypto and rendering, PWA caches, Cloudinary upload and read paths, and the production dependency tree.
+
+| Finding | Change | Evidence |
+| --- | --- | --- |
+| Private documents lacked an enforced CSP, frame restriction, HSTS and device permission policy. | Added a fresh request nonce for Next.js scripts, restricted document CSP, frame denial, HSTS on production responses, referrer and content-type protection, and a restrictive Permissions-Policy. Private routes remain `no-store`. | Unit policy tests; built production HTTP nonce/header test; headless Chrome PWA pages recorded no CSP violations. |
+| The ciphertext gateway checked upstream `Content-Length` and `Content-Range` headers but did not count actual stream bytes. | The gateway now errors on a truncated or overlong body and cancels the provider reader on failure. | Truncation/excess tests; live Cloudinary exact-range check. |
+| A legacy `ready` row with an incomplete encryption manifest could pass the initial media lookup. | Media lookup now requires a verified v1 file manifest, matching stored byte count, authenticated raw object and the fixed opaque namespace. | Lookup tests for legacy, foreign, deleting, wrong-mode and wrong-namespace records. |
+| Browser-side Zod validation attempted a caught `new Function` probe under the enforced CSP. | Configured the installed Zod 4.6.7 crypto schemas for `jitless` validation; production script eval remains blocked. | Synthetic Chrome login, vault-key unlock and private navigation recorded no CSP violations. |
+| Public bundle leakage had no repeatable check against locally configured server credentials. | Added `npm run security:bundle-check`; it compares configured secret values with built public bundles without printing the values. | 40 public files and five configured values scanned after production build. |
+| The route allowlist had no test against the full private route inventory. | Added a test that enumerates every private App Router handler and requires explicit proxy enablement and a server owner check. | Route inventory test; isolated HTTP anonymous/locked/revoked checks. |
+
+## Boundaries verified
+
+- The owner model and Atlas indexes enforce one singleton owner; no signup, registration or sharing route exists. Argon2id verifies login attempts, missing-owner and wrong-password requests return the same `401` envelope, and a MongoDB bucket limits guesses. Session cookies are HttpOnly, SameSite Strict and Secure in production; MongoDB stores only token hashes. The isolated HTTP check exercises lock, idle expiry, revocation and document reopening.
+- Private `/vault` pages authorize in the server layout. Every `/api/vault`, `/api/files`, `/api/folders`, `/api/uploads`, `/api/deletions` and `/api/settings` route is behind the default-deny proxy and has a handler-level authorization path. Unsafe owner mutations require an exact same-origin `Origin` and reject cross-site fetch metadata. Resource lookups use the session owner ID and canonical MongoDB IDs; client owner IDs and Cloudinary IDs do not select records.
+- Inline previews allow only selected image/audio/PDF/plain-text types. PDF is in an empty-sandbox iframe; HTML and SVG are never inline viewers. Decrypted object URLs are revoked on close, lock or unmount. The service worker stores only named public shell files; selected offline copies are ciphertext in IndexedDB.
+- The upload route receives bounded ciphertext, selects a server-generated opaque `.dat` ID, uses server-only Cloudinary credentials with `raw/authenticated` and `overwrite:false`, and checks the actual provider asset ID, mode, reported bytes and stored header before committing `ready`. The server cannot prove encrypted content is a decodable image or video; the unlocked browser must verify plaintext. The live account denied an unsigned synthetic ciphertext URL and returned exact signed ranges through the gateway. No signed Cloudinary URL is returned to the browser.
+- The AES-GCM tests reject changed headers, tags, metadata, offsets, wrong keys and truncated objects. These are implementation tests, not an independent cryptographic audit.
+
+## Unresolved risks and release gates
+
+| Priority | Risk / required action |
+| --- | --- |
+| **High — owner action** | The MongoDB credentials, Cloudinary API key and secret, and a proposed owner password were previously pasted into chat. Rotate the provider credentials in their dashboards, set a new strong unique owner password in VaultX Settings, and update only the ignored `.env.local`. Revoke old credentials. Do not paste replacements into chat. Existing encryption keys are separate; changing the login password does not rotate the vault master key. |
+| **High — release blocker** | There has been no independent cryptographic or deployment review, no production HTTPS/device matrix, and no full Android Chrome/iOS Safari media and recovery acceptance run. HTTP denial tests use guessed file IDs, while the live Cloudinary anonymous-denial test uses a separate disposable object; a full real-asset HTTP session test is still needed. Server-side tests and one headless Chrome run cannot establish these properties. |
+| **High — product limit** | This Cloudinary plan reported a 10 MiB raw-object limit; VaultX currently caps server-mediated transfers below 10,000,000 bytes. The PRD's near-100 MB encrypted video object and full phone seek-streaming acceptance are blocked pending a larger verified plan or a reviewed multi-object design. |
+| **Medium** | Cloudinary CDN copies of a previously signed URL remained briefly readable after deletion in the earlier account probe. VaultX does not hand signed URLs to browsers, and its gateway denies new reads after lock/delete; provider/CDN propagation still needs a production retention policy and verification. |
+| **Medium** | CSP intentionally permits inline style attributes, WebAssembly compilation and Blob workers for the current UI and local media pipeline. Scripts require per-request nonces in production; this policy still needs browser checks on every supported device and after major UI/encoder changes. HSTS is effective only when deployment serves the header over HTTPS. |
+| **Medium — tooling** | `npm audit` reports five high findings through development-only `eslint-config-next -> @next/eslint-plugin-next -> fast-glob -> micromatch -> braces`. `npm audit --omit=dev` reports zero. The registry currently has no patched `braces` 3.x release; `npm audit fix` proposes an incompatible Next/ESLint config downgrade. Track a compatible upstream fix rather than forcing that downgrade. |
+| **Medium** | The encrypted thumbnail upload/display path and large-file streaming/download paths remain incomplete or device-limited. Treat any unsupported path as unavailable; do not assume all PRD media features are delivered. |
+| **Low** | A stolen active browser session can use owner APIs until lock/revocation; global login throttling can also be abused to delay legitimate sign-in. Current cookies, expiry and DB rate limits reduce guessing but cannot eliminate device compromise or denial of service. |
+
+## Checks run for this review
+
+`npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run lock:check`, `npm run pwa:check`, `npm run security:browser-check`, `npm run security:bundle-check`, `npm run db:owner-race-check`, `npm run media:access-check`, `npm run uploads:integration-check`, `npm audit --json`, and `npm audit --omit=dev --json`. The live provider commands used disposable synthetic ciphertext and reported cleanup. Audit results are retained under ignored `test-results/` locally; they contain no VaultX credentials. Re-run the checks after credential rotation or deployment changes.
+
+The older `npm run folders:ui-check` script was also run, but failed on its obsolete **Choose image** selector after Uploads moved to the real multi-file manager. Its shared setup was reused for the separate passing `security:browser-check`; the old full UI script needs updating before it can be used as an acceptance gate again.

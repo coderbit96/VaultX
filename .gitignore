@@ -1,8 +1,15 @@
 # Dependencies and generated output
 /node_modules
 /.next/
+/test-results/
+/playwright-report/
 /out/
 /build/
+/public/ffmpeg/
+/public/offline-vault.js
+/public/offline-kdf.js
+/public/sw.js
+/reports/
 *.tsbuildinfo
 next-env.d.ts
 

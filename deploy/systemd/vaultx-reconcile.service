@@ -1,0 +1,16 @@
+[Unit]
+Description=VaultX bounded upload and deletion reconciliation pass
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vaultx
+Group=vaultx
+WorkingDirectory=/srv/vaultx
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/vaultx/production.env
+ExecStart=/usr/bin/npm run recovery:run -- --run
+TimeoutStartSec=10min
+NoNewPrivileges=true
+PrivateTmp=true
