@@ -20,7 +20,7 @@ async function ownerSessionActive(): Promise<boolean> {
   } catch { return false; }
 }
 
-export function VaultKeySettings() {
+export function VaultKeySettings({ simple = false }: { simple?: boolean }) {
   const [status, setStatus] = useState<Status>("loading");
   const [envelope, setEnvelope] = useState<VaultKeyEnvelope | null>(null);
   const [recoveryConfirmedAt, setRecoveryConfirmedAt] = useState<string | null>(null);
@@ -88,7 +88,8 @@ export function VaultKeySettings() {
     event.preventDefault();
     setError("");
     if (passphrase !== confirmPassphrase || passphrase.length < 16 || !separateConfirmed) {
-      setError("Use a separate vault passphrase of at least 16 characters and confirm it exactly.");
+      setError(simple ? "Use a different file password with at least 16 characters, then type it the same way twice."
+        : "Use a separate vault passphrase of at least 16 characters and confirm it exactly.");
       return;
     }
     const started = epoch.current;
@@ -112,7 +113,8 @@ export function VaultKeySettings() {
       setSavedOffline(false);
     } catch (caught) {
       if (started === epoch.current) setError(caught instanceof VaultKeyError && caught.code === "invalid_unlock"
-        ? "Choose a longer, less predictable vault passphrase. No keys were saved."
+        ? simple ? "Choose a longer file password that is hard to guess. Nothing was saved."
+          : "Choose a longer, less predictable vault passphrase. No keys were saved."
         : "Could not prepare vault keys on this device. No keys were saved.");
     } finally { setBusy(false); }
   }
@@ -184,7 +186,9 @@ export function VaultKeySettings() {
       setPassphrase("");
       setRecoveryInput("");
       setUnlocked(true);
-    } catch { if (started === epoch.current) setError("Could not unlock the vault key. Check your passphrase or recovery key."); }
+    } catch { if (started === epoch.current) setError(simple
+      ? "Could not open your files. Check the file password or recovery key and try again."
+      : "Could not unlock the vault key. Check your passphrase or recovery key."); }
     finally { setBusy(false); }
   }
 
@@ -224,53 +228,56 @@ export function VaultKeySettings() {
     }
   }
 
-  return <section className="mt-8 rounded-3xl border border-line bg-surface p-6 sm:p-8" aria-labelledby="keys-heading">
-    <h2 id="keys-heading" className="text-xl font-semibold">Vault encryption keys</h2>
-    <p className="mt-3 text-sm leading-6 text-muted">Your owner login password signs you in. A separate vault passphrase protects the encryption key on this device.</p>
+  return <section className="mt-6 rounded-3xl border border-line bg-surface p-6 sm:p-8" aria-labelledby="keys-heading">
+    <h2 id="keys-heading" className="text-xl font-semibold">{simple ? status === "ready" ? "Unlock your files" : "Set up private files" : "Vault encryption keys"}</h2>
+    <p className="mt-3 text-sm leading-6 text-muted">{simple
+      ? status === "ready" ? "Enter your file password to see, upload, and download your photos and videos. It is different from your sign-in password."
+        : "You are signed in. Before your first upload, create a separate file password and save a recovery key once."
+      : "Your owner login password signs you in. A separate vault passphrase protects the encryption key on this device."}</p>
 
     {status === "loading" ? <p className="mt-5 text-sm text-muted" role="status">Checking key setup…</p> : null}
     {status === "error" ? <p className="mt-5 text-sm text-danger" role="alert">Key status is unavailable. Reload this page.</p> : null}
     {status === "migration_required" ? <p className="mt-5 text-sm text-danger" role="alert">This vault has older or incomplete key metadata. Setup is blocked until a reviewed migration is available.</p> : null}
 
     {status === "uninitialized" && !pending ? <form onSubmit={prepare} className="mt-6 space-y-4">
-      <label htmlFor="vault-passphrase" className="block text-sm font-medium">Create a vault passphrase</label>
+      <label htmlFor="vault-passphrase" className="block text-sm font-medium">{simple ? "Create a file password" : "Create a vault passphrase"}</label>
       <Input id="vault-passphrase" type="password" autoComplete="new-password" minLength={16} maxLength={1024} required disabled={busy}
         value={passphrase} onChange={(event) => setPassphrase(event.target.value)} />
-      <label htmlFor="vault-passphrase-confirm" className="block text-sm font-medium">Confirm vault passphrase</label>
+      <label htmlFor="vault-passphrase-confirm" className="block text-sm font-medium">{simple ? "Type the file password again" : "Confirm vault passphrase"}</label>
       <Input id="vault-passphrase-confirm" type="password" autoComplete="new-password" minLength={16} maxLength={1024} required disabled={busy}
         value={confirmPassphrase} onChange={(event) => setConfirmPassphrase(event.target.value)} />
       <label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1.5 size-4 accent-accent" checked={separateConfirmed}
-        onChange={(event) => setSeparateConfirmed(event.target.checked)} disabled={busy} />This is different from my owner login password.</label>
-      <p className="text-xs leading-5 text-muted">Use a long, unique passphrase. It stays in this browser and is processed with Argon2id. Losing both this passphrase and your recovery key can permanently lose access to future encrypted files.</p>
-      <Button type="submit" disabled={busy}>{busy ? "Preparing keys…" : "Create vault keys"}</Button>
+        onChange={(event) => setSeparateConfirmed(event.target.checked)} disabled={busy} />This is different from my sign-in password.</label>
+      <p className="text-xs leading-5 text-muted">Use at least 16 characters. Keep this password safe: if you also lose your recovery key, your files may be impossible to open.</p>
+      <Button type="submit" disabled={busy}>{busy ? "Preparing keys…" : simple ? "Continue" : "Create vault keys"}</Button>
     </form> : null}
 
     {pending ? <form onSubmit={confirmRecovery} className="mt-6 space-y-4">
-      <p className="text-sm leading-6">Write this recovery key on paper or save it in a trusted offline password manager. It appears only during this setup and cannot be retrieved later. Finish confirmation before leaving this page.</p>
+      <p className="text-sm leading-6">One-time step: write down this recovery key or save it in a trusted offline password manager. It will not be shown again. You need it if you forget your file password.</p>
       <div className="break-all rounded-xl border border-accent/40 bg-raised p-4 font-mono text-sm" aria-label="One-time recovery key">{pending.recoveryCode}</div>
       <label htmlFor="recovery-confirm" className="block text-sm font-medium">Re-enter the entire recovery key</label>
       <Input id="recovery-confirm" type="password" autoComplete="off" required disabled={busy} value={recoveryInput}
         onChange={(event) => setRecoveryInput(event.target.value)} />
       <label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1.5 size-4 accent-accent" checked={savedOffline}
         onChange={(event) => setSavedOffline(event.target.checked)} disabled={busy} />I saved this recovery key offline and can find it later.</label>
-      <Button type="submit" disabled={busy || !savedOffline}>{busy ? "Saving encrypted backup…" : "Confirm and save encrypted backup"}</Button>
+      <Button type="submit" disabled={busy || !savedOffline}>{busy ? "Saving encrypted backup…" : simple ? "Finish setup" : "Confirm and save encrypted backup"}</Button>
     </form> : null}
 
     {status === "ready" ? <div className="mt-6">
-      <p className="text-sm text-muted">{recoveryConfirmedAt ? `You confirmed an offline recovery-key backup on ${new Date(recoveryConfirmedAt).toLocaleDateString()}.` : "Recovery-key backup status is unavailable."} VaultX cannot check whether the offline copy still exists. The recovery key will not be shown again.</p>
+      {!simple && <p className="text-sm text-muted">{recoveryConfirmedAt ? `You confirmed an offline recovery-key backup on ${new Date(recoveryConfirmedAt).toLocaleDateString()}.` : "Recovery-key backup status is unavailable."} VaultX cannot check whether the offline copy still exists. The recovery key will not be shown again.</p>}
       {unlocked ? <p className="mt-4 text-sm text-accent" role="status">Vault key unlocked on this device. Locking clears app-held key memory where practical.</p>
         : <form onSubmit={unlock} className="mt-5 space-y-4">
           <div className="flex flex-wrap gap-2" role="group" aria-label="Vault key unlock method">
-            <Button variant={method === "password" ? "primary" : "secondary"} onClick={() => { setMethod("password"); setError(""); }}>Vault passphrase</Button>
+            <Button variant={method === "password" ? "primary" : "secondary"} onClick={() => { setMethod("password"); setError(""); }}>{simple ? "File password" : "Vault passphrase"}</Button>
             <Button variant={method === "recovery" ? "primary" : "secondary"} onClick={() => { setMethod("recovery"); setError(""); }}>Recovery key</Button>
           </div>
-          <label htmlFor="key-unlock" className="block text-sm font-medium">{method === "password" ? "Vault passphrase" : "Recovery key"}</label>
+          <label htmlFor="key-unlock" className="block text-sm font-medium">{method === "password" ? simple ? "File password" : "Vault passphrase" : "Recovery key"}</label>
           <Input id="key-unlock" type="password" autoComplete="off" required disabled={busy}
             value={method === "password" ? passphrase : recoveryInput}
             onChange={(event) => method === "password" ? setPassphrase(event.target.value) : setRecoveryInput(event.target.value)} />
-          <Button type="submit" disabled={busy}>{busy ? "Unlocking key…" : "Unlock encryption key"}</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Unlocking files…" : simple ? "Open my gallery" : "Unlock encryption key"}</Button>
         </form>}
-      {unlocked ? <form onSubmit={rotate} className="mt-8 space-y-4 border-t border-line pt-6">
+      {!simple && unlocked ? <form onSubmit={rotate} className="mt-8 space-y-4 border-t border-line pt-6">
         <h3 className="text-lg font-semibold">Change vault passphrase</h3>
         <p className="text-sm leading-6 text-muted">Rewraps the vault master key in this browser. Existing encrypted files and your offline recovery key stay valid. Every device signs out afterward.</p>
         <label htmlFor="old-vault-passphrase" className="block text-sm font-medium">Current vault passphrase</label>

@@ -200,7 +200,7 @@ export function SimpleGallery() {
       {unlocked && <Button type="button" onClick={() => window.dispatchEvent(new Event("vaultx:open-upload-picker"))}>
         <Plus size={18} aria-hidden="true" />Upload photos or videos</Button>}
     </div>
-    {!unlocked ? <div><p className="text-sm text-muted">Unlock your encryption key once to view and upload media.</p><VaultKeySettings /></div> : <>
+    {!unlocked ? <VaultKeySettings simple /> : <>
       <UploadManager compact />
       {notice && <p role="status" className="rounded-xl border border-line bg-surface p-3 text-sm">{notice}{notice.includes("Deletion") && <Link href="/vault/deletions" className="ml-2 text-accent underline">Deletions</Link>}</p>}
       {state.status === "loading" && <div role="status" aria-label="Loading gallery" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

@@ -25,7 +25,7 @@ export default async function UnlockPage() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-accent">Owner sign-in</p>
           <h1 id="unlock-title" className="text-3xl font-semibold tracking-tight sm:text-4xl">Unlock your vault.</h1>
           <p className="mt-4 text-sm leading-7 text-muted">
-            Sign in to open VaultX. Your separate vault encryption key may need another unlock in Settings.
+            First, enter your sign-in password. Then enter your separate file password to open your photos and videos.
           </p>
           <LoginForm />
         </section>

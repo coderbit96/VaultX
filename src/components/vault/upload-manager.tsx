@@ -51,7 +51,7 @@ async function jsonApi<T>(path: string, method: string, body?: unknown): Promise
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
   const data = await response.json().catch(() => null) as { error?: { code?: string } } | null;
   if (!response.ok) throw new Error(data?.error?.code === "rate_limited" ? "Too many upload attempts. Try again later."
-    : data?.error?.code === "vault_setup_required" ? "Finish vault-key setup and confirm your recovery key before uploading."
+    : data?.error?.code === "vault_setup_required" ? "Finish the one-time file setup and save your recovery key before uploading."
     : data?.error?.code === "upload_conflict" ? "Upload state changed. Refresh the page and try again."
       : "Upload service unavailable. Try again later.");
   return data as T;
@@ -305,8 +305,10 @@ export function UploadManager({ compact = false }: { compact?: boolean }) {
     const media = compact ? selected.filter((file) => /^(?:image|video)\//.test(file.type)
       || /\.(?:jpe?g|png|webp|gif|heic|heif|mp4|mov|webm)$/i.test(file.name)) : selected;
     const { accepted, skipped } = dedupeSelection(media, seenSelections.current);
-    if (compact && media.length !== selected.length) setDuplicateNotice("Choose photos or videos only.");
-    setDuplicateNotice(skipped ? `${skipped} repeat selection${skipped === 1 ? " was" : "s were"} skipped in this tab. Choose the existing queue item to retry it.` : "");
+    const notices = [];
+    if (compact && media.length !== selected.length) notices.push("Choose photos or videos only.");
+    if (skipped) notices.push(`${skipped} repeat selection${skipped === 1 ? " was" : "s were"} skipped in this tab. Choose the existing queue item to retry it.`);
+    setDuplicateNotice(notices.join(" "));
     const next = accepted.map((file) => {
       const key = crypto.randomUUID(); files.current.set(key, file); selectedKeys.current.set(key, selectionKey(file)); queue.current.push(key);
       return { key, label: file.name, stage: "queued" as Stage, detail: "Waiting for local preparation." };

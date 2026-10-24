@@ -112,6 +112,6 @@ export function LoginForm() {
     </form> : null}
     {passkeyAvailable ? <div className="border-t border-line pt-5"><Button variant="secondary" onClick={() => void signInWithPasskey()} disabled={busy} className="w-full">Sign in with passkey</Button></div> : null}
     {error ? <p id="login-error" role="alert" className="text-sm text-danger">{error}</p> : <span id="login-error" className="sr-only" />}
-    <p className="text-xs leading-5 text-muted">PIN and passkey sign-in do not restore your vault encryption key. Unlock it with your separate vault passphrase or recovery key in Settings.</p>
+    <p className="text-xs leading-5 text-muted">Your files have a separate password. You will enter it after sign-in, or use your saved recovery key.</p>
   </div>;
 }
